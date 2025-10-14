@@ -1,0 +1,132 @@
+#set the load function:
+belast = (10)           # the distributed load q(x)
+
+L = var('L')            # declare symbol L
+L = 10                  # overwrite L with the numeric beam length
+
+LE = {"beweg":False, "gelenk":False}
+RE = {"beweg":False, "gelenk":True}
+
+# define boundary conditions at x=0 and x=L
+x_pos = (0, L)
+
+# set up a dict mapping names
+variables = {
+    x: var('x'),
+    "a": var('A'),
+    "b": var('B'),
+    "c": var('C'),
+    "d": var('D'),
+    "f": var("f")
+}
+
+#show(variables)                  # display the dict of symbols
+
+# initialize some lists to hold intermediate results
+shear_func     = [1]   # will become Q(x) (shear)
+moment_func    = [1]   # placeholder for M(x) (bending moment)
+slope_func    = [1]   # placeholder for φ(x) (slope)
+defl_func    = [1]   # placeholder for w(x) (deflection)
+
+
+# build a list to hold your chain of functions: [ load, Q, M, φ, w, … ]
+funktions = [0,0,0,0,0,0]
+funktions[0] = belast        # index 0 = load
+#next lines look like attempt to assign Q, M, φ, w
+#funktions[1] = neg_quer
+#funktions[2] = zweit_int     
+#funktions[2] = dritt_int
+#funktions[3] = viert_int
+
+# human-readable descriptions for show()
+erklaerungen = [
+    "Das ist die Funktion der angegebene Belastungsfunktion:",
+    "Das ist die berechnete umgekehrte Querkraft:",
+    "Das ist das berechnete Moment:",
+    "Das ist die berechnete Neigung:",
+    "Das ist die berechnete Biegelinie:",
+    "asd"
+]
+
+# now integrate in a loop, adding constants A, B, C, D, F
+for i in range(0,5):
+    variable_to_add = ("a","b","c","d","f")
+    print(erklaerungen[i])
+    print()
+
+    # integrate the previous function w.r.t. x and add the integration constant
+    funktions[i+1] = integrate(funktions[i], x) + variables[ variable_to_add[i] ]
+    
+    # display the newly formed function (without sorting)
+    show(funktions[i], order='lex')
+    print()
+
+
+eqn = []     # will collect your equations
+
+for i in range(0,2):
+    #print(f"für Seite {x_pos[i]} ist")
+    seiten_val = (LE, RE)
+    this_loop  = seiten_val[i]
+
+    # check if translation is free
+    if this_loop["beweg"] == true:
+        print("Kann nicht verwendet werden")
+        # …
+    else:
+        # impose deflection w(x) = 0 at the support
+        #print(f"Die Biegefunktion ist auf Position {i} = 0")
+        f(x) = funktions[4]                # define a Sage function f(x) := w(x)
+        #show(f(x_pos[i]) == 0)              # w(0) == 0 or w(L) == 0
+        eqn.append( f(x_pos[i]) == 0 )      # ← this line is actually wrong (see note)
+
+    # check if it’s a hinge → moment zero
+    if this_loop["gelenk"] == true:
+        #print("Moment bei {i} ist 0")
+        f(x) = funktions[2]                # M(x)
+        #show(f(x_pos[i]) == 0)
+        eqn.append( f(x_pos[i]) == 0 )
+    else:
+        #print("phi bei x_pos {i} ist 0")
+        f(x) = funktions[3]                # φ(x)
+        #show(f(x_pos[i]) == 0)
+        eqn.append( f(x_pos[i] )== 0 )
+    print()
+
+    #show(eqn)
+
+# solve the 4 BCs for A, B, C, D in one go
+s = solve(eqn)
+t = s[0]         # get the solution tuple/dict
+#show(s)
+#show(t)
+# pull off each constant from the solution
+const_a = t[3].rhs()
+const_b = t[2].rhs()
+const_c = t[1].rhs()
+const_d = t[0].rhs()
+
+# overwrite dict entries
+variables["a"]   = const_a
+variables["b"]   = const_b
+variables["c"]   = const_c
+variables["d"]   = const_d
+
+show(variables)
+
+# Build a substitution dict keyed by the _symbol_ A, B, …
+subsd = { var('A'): const_a,
+          var('B'): const_b,
+          var('C'): const_c,
+          var('D'): const_d }
+
+# Re-substitute into each integrated function
+for j in range(1,5):
+    funktions[j] = funktions[j].subs(subsd)
+    print(f"Solved function {j}")
+    print()
+    show(funktions[j])
+    print()
+    print()
+
+
