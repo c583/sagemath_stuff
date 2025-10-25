@@ -1,46 +1,47 @@
-#set the load function:
-belast = (10)           # the distributed load q(x)
+#verbose?
+verbose=False
+human_input=False
 
+#set the load function:
+load_function = 1            # the distributed load q(x)
 L = var('L')            # declare symbol L
 L = 10                  # overwrite L with the numeric beam length
 
-LE = {"beweg":False, "gelenk":False}
-RE = {"beweg":False, "gelenk":True}
+#declare external conditions
+LE = {"free_on_z":False, "joint":False}
+RE = {"free_on_z":False, "joint":False}
 
-# define boundary conditions at x=0 and x=L
-x_pos = (0, L)
+#Elasticity and crossection [Nm^2]
+EI = 210000000
 
-# set up a dict mapping names
+if verbose == True:
+    print("Configuration as follows: loadfunction:", load_function, "outside factors:", LE, RE)
+    
+#declare variables
 variables = {
-    x: var('x'),
+    "x": var('x'),
     "a": var('A'),
     "b": var('B'),
     "c": var('C'),
     "d": var('D'),
     "f": var("f")
 }
+x = PolynomialRing(RationalField(),"x").gen()
 
-#show(variables)                  # display the dict of symbols
+#index of position on the beam
+x_pos = (0, L)
 
-# initialize some lists to hold intermediate results
-shear_func     = [1]   # will become Q(x) (shear)
-moment_func    = [1]   # placeholder for M(x) (bending moment)
-slope_func    = [1]   # placeholder for φ(x) (slope)
-defl_func    = [1]   # placeholder for w(x) (deflection)
 
+#declare list of function
+functions=[]
 
 # build a list to hold your chain of functions: [ load, Q, M, φ, w, … ]
-funktions = [0,0,0,0,0,0]
-funktions[0] = belast        # index 0 = load
-#next lines look like attempt to assign Q, M, φ, w
-#funktions[1] = neg_quer
-#funktions[2] = zweit_int     
-#funktions[2] = dritt_int
-#funktions[3] = viert_int
+functions = [0,0,0,0,0,0]
+functions[0] = load_function        # index 0 = load
 
 # human-readable descriptions for show()
-erklaerungen = [
-    "Das ist die Funktion der angegebene Belastungsfunktion:",
+human_readable_desc = [
+    "Das ist die Funktion der angegebene load_functionungsfunktion:",
     "Das ist die berechnete umgekehrte Querkraft:",
     "Das ist das berechnete Moment:",
     "Das ist die berechnete Neigung:",
@@ -48,85 +49,252 @@ erklaerungen = [
     "asd"
 ]
 
-# now integrate in a loop, adding constants A, B, C, D, F
-for i in range(0,5):
-    variable_to_add = ("a","b","c","d","f")
-    print(erklaerungen[i])
-    print()
-
-    # integrate the previous function w.r.t. x and add the integration constant
-    funktions[i+1] = integrate(funktions[i], x) + variables[ variable_to_add[i] ]
+# now integrate in a loop, adding constants A, B, C, D
+# now integrate in a loop, adding constants A, B, C, D
+def integration_loop(functions, variables, verbose):
+    if verbose == True:
+        print("Starting the int loop")
     
-    # display the newly formed function (without sorting)
-    show(funktions[i], order='lex')
-    print()
+    for i in range(0,5):
+        
+        variable_to_add = ("a","b","c","d","f")
+
+        # integrate the previous function w.r.t. x and add the integration constant
+        functions[i+1] = integrate(functions[i], x) + variables[ variable_to_add[i] ]
+        
+        # display if verbose is on
+        if verbose == True:
+            print("int loop iteration:", i)
+            print(human_readable_desc[i])
+            print()
+            show(functions[i], order='lex')
+            
+    if verbose == True:
+        print("Integration fertig")
+    return functions
+
+#
+#Declare list of equations
+eqn = []
+#Declare tuple "sides" which holds outside factor dictionaries LE and RE
+side = (LE, RE)
 
 
-eqn = []     # will collect your equations
+def outside_new(functions, side, eqn, verbose, x_pos):
+    for i in range (0,2):
+        current_side  = side[i]  
+        indicator=("LE", "RE")
+        if current_side["free_on_z"] == True:
+            if verbose == True:
+                print(indicator[i], "is free on z")
+            if side[i]["joint"] == true:
 
-for i in range(0,2):
-    #print(f"für Seite {x_pos[i]} ist")
-    seiten_val = (LE, RE)
-    this_loop  = seiten_val[i]
+                f = functions[1]
+                eqn.append( f.subs(x = x_pos[i]) == 0)
+                
+                g = functions[2]
+                eqn.append( g.subs(x = x_pos[i]) == 0)
 
-    # check if translation is free
-    if this_loop["beweg"] == true:
-        print("Kann nicht verwendet werden")
-        # …
-    else:
-        # impose deflection w(x) = 0 at the support
-        #print(f"Die Biegefunktion ist auf Position {i} = 0")
-        f(x) = funktions[4]                # define a Sage function f(x) := w(x)
-        #show(f(x_pos[i]) == 0)              # w(0) == 0 or w(L) == 0
-        eqn.append( f(x_pos[i]) == 0 )      # ← this line is actually wrong (see note)
+                if verbose == True:
+                    print("The beam can rotate on current side ", current_side)
+                    print("It seems to be an open end")
+                    
+                    print("The shear function should = 0 at this end")
+                    print(functions[1], "= 0")
+    
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+                    print("The moment function should = 0 at this end")
+                    print("#moment = 0")
+                    print(functions[2], " = 0 ")                
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+            
+            else:
 
-    # check if it’s a hinge → moment zero
-    if this_loop["gelenk"] == true:
-        #print("Moment bei {i} ist 0")
-        f(x) = funktions[2]                # M(x)
-        #show(f(x_pos[i]) == 0)
-        eqn.append( f(x_pos[i]) == 0 )
-    else:
-        #print("phi bei x_pos {i} ist 0")
-        f(x) = funktions[3]                # φ(x)
-        #show(f(x_pos[i]) == 0)
-        eqn.append( f(x_pos[i] )== 0 )
-    print()
+                f = functions[3]
+                eqn.append( f.subs(x = x_pos[i]) == 0)
 
-    #show(eqn)
+                g = functions[1]
+                eqn.append( g.subs(x = x_pos[i]) == 0)
+                
+                if verbose == True:
+                    print("#beam cannot rotate on current side ")
+                    print("#frei verschiebbar aber nicht drehbar")
+                    print("#---| |")
+                    print("#winkel = 0")
+                    print("#functions[3]")
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+                    print("#shear = 0")
+                    print("#functions[1]")
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+        
+        else:
+            
+            print(indicator[i], "is not free on z")
+            
+            if side[i]["joint"] == true:
 
-# solve the 4 BCs for A, B, C, D in one go
-s = solve(eqn)
-t = s[0]         # get the solution tuple/dict
-#show(s)
-#show(t)
-# pull off each constant from the solution
-const_a = t[3].rhs()
-const_b = t[2].rhs()
-const_c = t[1].rhs()
-const_d = t[0].rhs()
+                print(indicator[i], "is free to rotate")
+                
+                h = functions[2]
+                eqn.append( h.subs(x = x_pos[i]) == 0)
+                
+                k = functions[4]
+                eqn.append( k.subs(x = x_pos[i]) == 0)
+                
+                if  verbose == True:
+                    print("The beam can rotate on current side ", current_side)
+                    #kein moment desshalb function 2
+                    print("The moment function should = 0 at this end")
+                    print("#moment = 0")
+                    print(functions[2], "= 0")
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+                    print("The deflect function should = 0 at this end")
+                    print("#moment = 0")
+                    print(functions[4], " = 0 ")
+                    print("eine gleichung wurde angehängt, eqn ist jetzt:")
+                    show(eqn)
+            
+            else:
+                
+                print(indicator[i], "is not free to rotate")
+                
+                k = functions[4]
+                eqn.append( k.subs(x = x_pos[i]) == 0)
+                f = functions[3]
+                eqn.append( f.subs(x = x_pos[i]) == 0)
+                
+                if verbose == True:
+                    print("#beam cannot rotate on current side ")
+                    print("#completely rigid")
+                    print("#deflection = 0")
+                    print("#functions[4]")             
+                    print("#winkel = 0")
+                    print("#functions[3]")
+                
 
-# overwrite dict entries
-variables["a"]   = const_a
-variables["b"]   = const_b
-variables["c"]   = const_c
-variables["d"]   = const_d
 
-show(variables)
+def solve_constants(eqn, variables, verbose):
+    if verbose == True:
+        print("Starting the solve constants")
+    
+    try:
+        # solve the 4 BCs for A, B, C, D in one go
+        s = solve(eqn)
+        t = s[0]         # get the solution tuple/dict
+        t=s[0]
+        
+        # pull off each constant from the solution
+        const_a = t[3].rhs()
+        const_b = t[2].rhs()
+        const_c = t[1].rhs()
+        const_d = t[0].rhs()
+        
+        # overwrite dict entries
+        variables["a"]   = const_a
+        variables["b"]   = const_b
+        variables["c"]   = const_c
+        variables["d"]   = const_d
+        
+        if verbose == True:
+    
+            print("show(s)")
+            show(t)
+            print("show(t)")
+            show(t)
+            print("show(eqn)")
+            show(eqn)
+            print(eqn)
+            print("die neuen variablen")
+            show(variables)
+        
+        # Build a substitution dict keyed by the _symbol_ A, B, …
+        subsd = { var('A'): const_a,
+                var('B'): const_b,
+                var('C'): const_c,
+                var('D'): const_d }
+    
+        # Re-substitute into each integrated function
+        for j in range(1,5):
+            functions[j] = functions[j].subs(subsd)
+            if verbose == True:
+                print(f"Solved function {j}")
+                print()
+                show(functions[j])
+                print()
+    
+        return functions
 
-# Build a substitution dict keyed by the _symbol_ A, B, …
-subsd = { var('A'): const_a,
-          var('B'): const_b,
-          var('C'): const_c,
-          var('D'): const_d }
+    except:
+        print("Couldn't solve equation set. Propably not consistent.")
 
-# Re-substitute into each integrated function
-for j in range(1,5):
-    funktions[j] = funktions[j].subs(subsd)
-    print(f"Solved function {j}")
-    print()
-    show(funktions[j])
-    print()
-    print()
+#
+#declare labels for plotting
+labels = None
+
+def plot_polynomials(functions, L, verbose, labels=None):
+    # For example: indices 0,1,2 get distinct colors; index 3 (ω(x)) is red.
+    colors = ['blue', 'green', 'purple', 'red', 'red']
+    
+    # Define line widths. Make the fourth function thicker.
+    line_widths = [1, 1, 1, 1, 3]
+
+    # We will assume x is the variable
+    var('x')
+    
+    # If no labels are provided, use some defaults.
+    #if labels is None:
+    #    labels = ["F(x)", "V(x)", "M(x)", "ω(x)"]
+    labels = ["F(x)", "V(x)", "M(x)", "ϕ(x)", "ω(x)"]
+    
+    
+    # First, print (display) each full polynomial expression.
+    print("Polynomial expressions:")
+    print("")
+    for i in range(5):
+        # Using show() to display the full function (as a LaTeX expression)
+        print("Expression for ", labels[i], "in", colors[i], "and lineweight:", line_widths[i])
+        print("")
+        show(labels[i], " = ", functions[i]) 
+        print("")
+        print("")
+    
+    # Define the colors for the curves.
+
+    
+    # We will collect individual plots here.
+    plots_list = []
+    
+    # For each function, create a plot and add a text label at x = L.
+    for i in range(0,5):
+        # Create the plot for poly_list[i] over x in [0,L]
+        p = plot(functions[i], (0,L), color=colors[i], thickness=line_widths[i])
+
+        plots_list.append(p)
+    
+    # Combine all plots into a single graphics object.
+    final_plot = sum(plots_list)
+    
+    
+    # Show the final plot with a title.
+    final_plot.show(title="Polynomial Functions Plot on [0, L]")
+#
+
+integration_loop(functions, variables, verbose)
+print("Function integration loop ran successfully")
+outside_new(functions, side, eqn, verbose, x_pos)
+#outside_factors(functions, side, eqn, verbose, x_pos)
+print("Function outside factors ran successfully")
+
+solve_constants(eqn, variables, verbose)
+print("Integration Constants have been substituted for calculated values")
+
+plot_polynomials(functions, L, labels, verbose)
+
+plot(-1 / EI * functions[4], (0, L))
 
 
