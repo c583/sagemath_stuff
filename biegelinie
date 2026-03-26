@@ -267,6 +267,7 @@ def plot_polynomials(functions, L, verbose, labels=None):
 
     
     # We will collect individual plots here.
+    #I added a comment here
     plots_list = []
     
     # For each function, create a plot and add a text label at x = L.
